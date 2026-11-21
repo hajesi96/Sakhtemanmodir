@@ -24,21 +24,21 @@ object XlsxExporter {
         rows += listOf("تعداد واحدها" to false, units.size.toString() to true, "تعداد ساکنان" to false, residents.size.toString() to true)
         rows += listOf("جمع شارژ ثابت ماهانه" to false, units.sumOf { it.fixedCharge }.toString() to true, "جمع دریافتی" to false, payments.sumOf { it.amount }.toString() to true)
         rows += listOf("جمع هزینه‌ها" to false, expenses.sumOf { it.amount }.toString() to true, "مانده خالص" to false, (payments.sumOf { it.amount } - expenses.sumOf { it.amount }).toString() to true)
-        rows += emptyList()
+        rows.add(emptyList())
         rows += listOf("قبض آب کل" to false, (waterBill?.totalAmount ?: 0L).toString() to true, "تعداد نفرات مبنا" to false, waterAllocations.sumOf { it.residentCount }.toString() to true)
         rows += listOf("سهم آب واحد" to false, "تعداد ساکنان زمان ثبت قبض" to false, "مبلغ سهم (تومان)" to false)
         waterAllocations.forEach { a -> rows += listOf("واحد ${units.find { it.id == a.unitId }?.number ?: 0}" to false, a.residentCount.toString() to true, a.amount.toString() to true) }
-        rows += emptyList()
+        rows.add(emptyList())
         rows += listOf("واحد" to false, "مالک" to false, "مستأجر" to false, "تعداد ساکن" to false, "شارژ ثابت" to false, "پرداخت این ماه" to false, "سهم آب (تعداد نفر)" to false)
         units.forEach { u ->
             val people = residents.count { it.unitId == u.id }
             val paid = payments.filter { it.unitId == u.id }.sumOf { it.amount }
             rows += listOf("${u.number}" to false, u.ownerName to false, u.tenantName to false, people.toString() to true, u.fixedCharge.toString() to true, paid.toString() to true, people.toString() to true)
         }
-        rows += emptyList()
+        rows.add(emptyList())
         rows += listOf("هزینه‌ها" to false, "دسته‌بندی" to false, "مبلغ" to false, "تاریخ" to false, "شرح" to false)
         expenses.forEach { e -> rows += listOf(e.title to false, e.category to false, e.amount.toString() to true, e.dateText to false, e.description to false) }
-        rows += emptyList()
+        rows.add(emptyList())
         rows += listOf("دریافتی‌ها" to false, "واحد" to false, "مبلغ" to false, "تاریخ" to false, "شرح" to false)
         payments.forEach { p -> rows += listOf("پرداخت" to false, (units.find { it.id == p.unitId }?.number ?: 0).toString() to true, p.amount.toString() to true, p.dateText to false, p.description to false) }
 
