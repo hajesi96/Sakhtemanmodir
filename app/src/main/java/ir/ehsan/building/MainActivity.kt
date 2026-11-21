@@ -47,14 +47,28 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun money(v: Long): String = NumberFormat.getNumberInstance(Locale("fa", "IR")).format(v) + " تومان"
+
 private fun currentMonth(): String {
-    val cal = android.icu.util.PersianCalendar()
-    return "%04d-%02d".format(Locale.US, cal.get(android.icu.util.Calendar.YEAR), cal.get(android.icu.util.Calendar.MONTH) + 1)
+    val cal = android.icu.util.Calendar.getInstance(
+        android.icu.util.ULocale("fa_IR@calendar=persian")
+    )
+    val year = cal.get(android.icu.util.Calendar.YEAR)
+    val month = cal.get(android.icu.util.Calendar.MONTH) + 1
+
+    return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}"
 }
+
 private fun currentSolarDate(): String {
-    val cal = android.icu.util.PersianCalendar()
-    return "%04d/%02d/%02d".format(Locale.US, cal.get(android.icu.util.Calendar.YEAR), cal.get(android.icu.util.Calendar.MONTH) + 1, cal.get(android.icu.util.Calendar.DAY_OF_MONTH))
+    val cal = android.icu.util.Calendar.getInstance(
+        android.icu.util.ULocale("fa_IR@calendar=persian")
+    )
+    val year = cal.get(android.icu.util.Calendar.YEAR)
+    val month = cal.get(android.icu.util.Calendar.MONTH) + 1
+    val day = cal.get(android.icu.util.Calendar.DAY_OF_MONTH)
+
+    return "${year.toString().padStart(4, '0')}/${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}"
 }
+
 
 @Composable
 fun BuildingApp() {
