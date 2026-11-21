@@ -47,7 +47,14 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun money(v: Long): String = NumberFormat.getNumberInstance(Locale("fa", "IR")).format(v) + " تومان"
-private fun currentMonth() = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
+private fun currentMonth(): String {
+    val cal = android.icu.util.PersianCalendar()
+    return "%04d-%02d".format(Locale.US, cal.get(android.icu.util.Calendar.YEAR), cal.get(android.icu.util.Calendar.MONTH) + 1)
+}
+private fun currentSolarDate(): String {
+    val cal = android.icu.util.PersianCalendar()
+    return "%04d/%02d/%02d".format(Locale.US, cal.get(android.icu.util.Calendar.YEAR), cal.get(android.icu.util.Calendar.MONTH) + 1, cal.get(android.icu.util.Calendar.DAY_OF_MONTH))
+}
 
 @Composable
 fun BuildingApp() {
@@ -79,7 +86,7 @@ fun BuildingApp() {
                 Icon(Icons.Default.Apartment, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf("نمای کلی", "واحدها", "ساکنان", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
+                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
                     FilterChip(selected = tab == item, onClick = { tab = item }, label = { Text(item) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color.White, selectedLabelColor = Navy, labelColor = Color(0xFFE0E9F5)))
                 }
             }
@@ -89,12 +96,11 @@ fun BuildingApp() {
             when (tab) {
                 "نمای کلی" -> Dashboard(units, residents, payments, expenses, month, onNavigate = { tab = it })
                 "واحدها" -> UnitScreen(units, residents, payments, onAdd = { dialog = "unit" }, onDelete = { id -> scope.launch { dao.deleteUnit(id) } })
-                "ساکنان" -> ResidentScreen(residents, units, onAdd = { dialog = "resident" }, onDelete = { id -> scope.launch { dao.deleteResident(id) } })
                 "قبض آب" -> WaterBillScreen(month, { month = it }, units, residents, waterBills, onSave = { m, total ->
                     scope.launch {
-                        val counts = units.associate { it.id to residents.count { r -> r.unitId == it.id } }
+                        val counts = units.associate { it.id to it.peopleCount }
                         val people = counts.values.sum()
-                        if (people == 0) { notice = "ابتدا ساکنان واحدها را ثبت کنید" } else {
+                        if (people == 0) { notice = "تعداد نفرات واحدها را در بخش واحدها ثبت کنید" } else {
                             val allocations = mutableListOf<WaterAllocationEntity>()
                             var allocated = 0L
                             val active = units.filter { (counts[it.id] ?: 0) > 0 }
@@ -129,7 +135,7 @@ fun BuildingApp() {
             scope.launch {
                 try {
                     when (dialog) {
-                        "unit" -> dao.insertUnit(UnitEntity(number = values[0].toInt(), ownerName = values[1], tenantName = values[2], fixedCharge = values[3].toLongOrNull() ?: 0))
+                        "unit" -> dao.insertUnit(UnitEntity(number = values[0].toInt(), ownerName = values[1], tenantName = values[2], phone = values[3], fixedCharge = values[4].toLongOrNull() ?: 0, peopleCount = values[5].toIntOrNull() ?: 0))
                         "resident" -> { val u = units.find { it.number == values[0].toIntOrNull() }; if (u != null) dao.insertResident(ResidentEntity(unitId = u.id, name = values[1], phone = values[2])) else notice = "شماره واحد پیدا نشد" }
                         "payment" -> { val u = units.find { it.number == values[0].toIntOrNull() }; if (u != null) dao.insertPayment(PaymentEntity(unitId = u.id, amount = values[1].toLongOrNull() ?: 0, monthKey = values[2], dateText = values[3], description = values[4])) else notice = "شماره واحد پیدا نشد" }
                         "expense" -> dao.insertExpense(ExpenseEntity(title = values[0], category = values[1], amount = values[2].toLongOrNull() ?: 0, monthKey = values[3], dateText = values[4], description = values[5]))
@@ -155,8 +161,8 @@ private fun Dashboard(
     val paid = monthPayments.sumOf { it.amount }
     val spent = monthExpenses.sumOf { it.amount }
     val net = paid - spent
-    val occupied = units.count { u -> residents.any { it.unitId == u.id } }
-    val totalPeople = residents.size
+    val occupied = units.count { it.peopleCount > 0 }
+    val totalPeople = units.sumOf { it.peopleCount }
     val progress = if (paid + spent == 0L) 0f else (paid.toFloat() / (paid + spent).toFloat()).coerceIn(0f, 1f)
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -211,7 +217,7 @@ private fun Dashboard(
                         Text("مبنای تقسیم: تعداد ساکنان هر واحد", color = Color.Gray, fontSize = 11.sp)
                         Text("تعداد ساکنان ثبت‌شده: $totalPeople نفر", color = Blue, fontSize = 12.sp)
                     }
-                    TextButton(onClick = { onNavigate("ساکنان") }) { Text("بررسی") }
+                    TextButton(onClick = { onNavigate("واحدها") }) { Text("بررسی") }
                 }
             }
         }
@@ -272,7 +278,8 @@ private fun UnitScreen(units: List<UnitEntity>, residents: List<ResidentEntity>,
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text("واحد ${u.number}", color = Navy, fontWeight = FontWeight.Bold)
                         Text("مالک: ${u.ownerName.ifBlank { "ثبت نشده" }}  ·  مستأجر: ${u.tenantName.ifBlank { "ندارد" }}", fontSize = 11.sp, color = Color.Gray)
-                        Text("ساکنان: ${residents.count { it.unitId == u.id }} نفر  |  شارژ: ${money(u.fixedCharge)}", fontSize = 11.sp, color = Green)
+                        Text("تعداد نفرات: ${u.peopleCount} نفر  |  شارژ: ${money(u.fixedCharge)}", fontSize = 11.sp, color = Green)
+                        if (u.phone.isNotBlank()) Text("تماس: ${u.phone}", fontSize = 11.sp, color = Color.Gray)
                     }
                     IconButton(onClick = { onDelete(u.id) }) { Icon(Icons.Default.DeleteOutline, null, tint = Red) }
                 }
@@ -337,7 +344,7 @@ private fun WaterBillScreen(
     onSave: (String, Long) -> Unit
 ) {
     var amountText by remember(month, bills) { mutableStateOf(bills.find { it.monthKey == month }?.totalAmount?.toString() ?: "") }
-    val people = residents.size
+    val people = units.sumOf { it.peopleCount }
     val amount = amountText.toLongOrNull()?.coerceAtLeast(0) ?: 0L
     val perPerson = if (people > 0) amount.toDouble() / people else 0.0
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -346,7 +353,7 @@ private fun WaterBillScreen(
             Text("تقسیم بر اساس تعداد ساکنان ثبت‌شده در هر واحد", color = Color.Gray, fontSize = 12.sp)
         }
         item {
-            OutlinedTextField(value = month, onValueChange = onMonth, label = { Text("ماه قبض (yyyy-MM)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = month, onValueChange = onMonth, label = { Text("ماه قبض شمسی (مثلاً 1405-08)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit) }, label = { Text("مبلغ کل قبض (تومان)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         }
@@ -360,7 +367,7 @@ private fun WaterBillScreen(
             }
         }
         items(units, key = { it.id }) { unit ->
-            val count = residents.count { it.unitId == unit.id }
+            val count = unit.peopleCount
             val share = if (people > 0) (amount.toDouble() * count / people).toLong() else 0L
             Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -388,9 +395,9 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
     val paid = monthPayments.sumOf { it.amount }; val spent = monthExpenses.sumOf { it.amount }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("گزارش ماهانه", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text("گزارش مالی قابل خروجی برای اکسل", color = Color.Gray, fontSize = 12.sp) }
-        item { OutlinedTextField(value = month, onValueChange = onMonth, label = { Text("ماه گزارش (مثلاً 2026-11)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(13.dp)) }
+        item { OutlinedTextField(value = month, onValueChange = onMonth, label = { Text("ماه گزارش شمسی (مثلاً 1405-08)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(13.dp)) }
         item { MetricCard("جمع شارژ ثابت", money(units.sumOf { it.fixedCharge }), Icons.Default.Payments, Blue, Modifier.fillMaxWidth()) }
-        item { MetricCard("تعداد ساکنان", residents.size.toString(), Icons.Default.People, Green, Modifier.fillMaxWidth()) }
+        item { MetricCard("تعداد نفرات", units.sumOf { it.peopleCount }.toString(), Icons.Default.People, Green, Modifier.fillMaxWidth()) }
         item { MetricCard("دریافتی ماه", money(paid), Icons.Default.AccountBalanceWallet, Green, Modifier.fillMaxWidth()) }
         item { MetricCard("هزینه ماه", money(spent), Icons.Default.ReceiptLong, Red, Modifier.fillMaxWidth()) }
         item { MetricCard("مانده خالص", money(paid - spent), Icons.Default.Analytics, Navy, Modifier.fillMaxWidth()) }
@@ -402,15 +409,15 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
 @Composable
 private fun EntryDialog(type: String, units: List<UnitEntity>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     val fields = when (type) {
-        "unit" -> listOf("شماره واحد", "نام مالک", "نام مستأجر", "شارژ ثابت (تومان)")
+        "unit" -> listOf("شماره واحد", "نام مالک", "نام مستأجر", "شماره تماس", "شارژ ثابت (تومان)", "تعداد نفرات")
         "resident" -> listOf("شماره واحد", "نام ساکن", "شماره تماس")
-        "payment" -> listOf("شماره واحد", "مبلغ (تومان)", "ماه (yyyy-MM)", "تاریخ", "شرح")
-        else -> listOf("عنوان هزینه", "دسته‌بندی", "مبلغ (تومان)", "ماه (yyyy-MM)", "تاریخ", "شرح")
+        "payment" -> listOf("شماره واحد", "مبلغ (تومان)", "ماه شمسی (1405-08)", "تاریخ", "شرح")
+        else -> listOf("عنوان هزینه", "دسته‌بندی", "مبلغ (تومان)", "ماه شمسی (1405-08)", "تاریخ", "شرح")
     }
-    val values = remember(type) { fields.map { if (it.startsWith("ماه")) currentMonth() else if (it == "تاریخ") java.text.SimpleDateFormat("yyyy/MM/dd", Locale.US).format(java.util.Date()) else "" }.toMutableStateList() }
+    val values = remember(type) { fields.map { if (it.startsWith("ماه")) currentMonth() else if (it == "تاریخ") currentSolarDate() else "" }.toMutableStateList() }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(when(type) { "unit" -> "افزودن واحد"; "resident" -> "افزودن ساکن"; "payment" -> "ثبت دریافت"; else -> "ثبت هزینه" }, color = Navy, fontWeight = FontWeight.Bold) },
         text = { Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            if (type == "resident" || type == "payment") Text("شماره واحدهای موجود: ${units.joinToString("، ") { it.number.toString() }}", fontSize = 11.sp, color = Blue)
+            if (type == "payment") Text("شماره واحدهای موجود: ${units.joinToString("، ") { it.number.toString() }}", fontSize = 11.sp, color = Blue)
             fields.forEachIndexed { i, label -> OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp)) }
         } },
         confirmButton = { Button(onClick = { onSave(values.toList()) }) { Text("ذخیره") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } })

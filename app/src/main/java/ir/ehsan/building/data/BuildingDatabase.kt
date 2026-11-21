@@ -12,6 +12,8 @@ data class UnitEntity(
     val number: Int,
     val ownerName: String = "",
     val tenantName: String = "",
+    val phone: String = "",
+    val peopleCount: Int = 0,
     val fixedCharge: Long = 0,
     val note: String = ""
 )
@@ -79,7 +81,7 @@ interface BuildingDao {
     @Query("DELETE FROM expenses WHERE id = :id") suspend fun deleteExpense(id: Long)
 }
 
-@Database(entities = [UnitEntity::class, ResidentEntity::class, PaymentEntity::class, ExpenseEntity::class, WaterBillEntity::class, WaterAllocationEntity::class], version = 2, exportSchema = false)
+@Database(entities = [UnitEntity::class, ResidentEntity::class, PaymentEntity::class, ExpenseEntity::class, WaterBillEntity::class, WaterAllocationEntity::class], version = 3, exportSchema = false)
 abstract class BuildingDatabase : RoomDatabase() {
     abstract fun dao(): BuildingDao
     companion object {
@@ -91,6 +93,13 @@ abstract class BuildingDatabase : RoomDatabase() {
                         db.execSQL("CREATE TABLE IF NOT EXISTS water_bills (monthKey TEXT NOT NULL, totalAmount INTEGER NOT NULL, savedAt INTEGER NOT NULL, PRIMARY KEY(monthKey))")
                         db.execSQL("CREATE TABLE IF NOT EXISTS water_allocations (monthKey TEXT NOT NULL, unitId INTEGER NOT NULL, residentCount INTEGER NOT NULL, amount INTEGER NOT NULL, PRIMARY KEY(monthKey, unitId))")
                         db.execSQL("CREATE INDEX IF NOT EXISTS index_water_allocations_unitId ON water_allocations(unitId)")
+                    }
+                }, object : Migration(2, 3) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE units ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE units ADD COLUMN peopleCount INTEGER NOT NULL DEFAULT 0")
+                        db.execSQL("UPDATE units SET peopleCount = (SELECT COUNT(*) FROM residents WHERE residents.unitId = units.id)")
+                        db.execSQL("UPDATE units SET phone = COALESCE((SELECT phone FROM residents WHERE residents.unitId = units.id AND phone != '' ORDER BY id LIMIT 1), '')")
                     }
                 }).build().also { INSTANCE = it }
         }

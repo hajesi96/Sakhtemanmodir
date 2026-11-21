@@ -21,7 +21,7 @@ object XlsxExporter {
     fun export(context: Context, month: String, units: List<UnitEntity>, residents: List<ResidentEntity>, payments: List<PaymentEntity>, expenses: List<ExpenseEntity>, waterBill: WaterBillEntity?, waterAllocations: List<WaterAllocationEntity>): File {
         val rows = mutableListOf<List<Pair<String, Boolean>>>()
         rows += listOf("گزارش مالی ساختمان" to false, "ماه: $month" to false)
-        rows += listOf("تعداد واحدها" to false, units.size.toString() to true, "تعداد ساکنان" to false, residents.size.toString() to true)
+        rows += listOf("تعداد واحدها" to false, units.size.toString() to true, "تعداد ساکنان" to false, units.sumOf { it.peopleCount }.toString() to true)
         rows += listOf("جمع شارژ ثابت ماهانه" to false, units.sumOf { it.fixedCharge }.toString() to true, "جمع دریافتی" to false, payments.sumOf { it.amount }.toString() to true)
         rows += listOf("جمع هزینه‌ها" to false, expenses.sumOf { it.amount }.toString() to true, "مانده خالص" to false, (payments.sumOf { it.amount } - expenses.sumOf { it.amount }).toString() to true)
         rows.add(emptyList())
@@ -31,7 +31,7 @@ object XlsxExporter {
         rows.add(emptyList())
         rows += listOf("واحد" to false, "مالک" to false, "مستأجر" to false, "تعداد ساکن" to false, "شارژ ثابت" to false, "پرداخت این ماه" to false, "سهم آب (تعداد نفر)" to false)
         units.forEach { u ->
-            val people = residents.count { it.unitId == u.id }
+            val people = u.peopleCount
             val paid = payments.filter { it.unitId == u.id }.sumOf { it.amount }
             rows += listOf("${u.number}" to false, u.ownerName to false, u.tenantName to false, people.toString() to true, u.fixedCharge.toString() to true, paid.toString() to true, people.toString() to true)
         }
