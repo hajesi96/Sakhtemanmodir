@@ -2,7 +2,7 @@ name: Build SakhtemanModir APK
 
 on:
   push:
-    branches: [main, 'feature/v1.2.0-settings-payments']
+    branches: [main, 'feature/v1.2.0-settings-payments', 'feature/modir-plus-accounts']
   workflow_dispatch:
 
 permissions:
@@ -31,12 +31,12 @@ jobs:
         run: gradle assembleDebug
 
       - name: Rename APK for download
-        run: cp app/build/outputs/apk/debug/app-debug.apk 'app/build/outputs/apk/debug/Modir.apk'
+        run: cp app/build/outputs/apk/debug/app-debug.apk 'app/build/outputs/apk/debug/Modir-Plus.apk'
 
       - name: Save APK
         uses: actions/upload-artifact@v4
         with:
-          name: Modir-APK
-          path: app/build/outputs/apk/debug/Modir.apk
+          name: Modir-Plus-APK
+          path: app/build/outputs/apk/debug/Modir-Plus.apk
 
 # Rebuild trigger: package the current feature branch as Modir.apk.
