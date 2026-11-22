@@ -101,10 +101,13 @@ fun BuildingApp() {
                     Text("مدیریت ساختمان", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
                     Text("پنل هوشمند مدیر ساختمان", color = Color(0xFFB9C9DF), fontSize = 12.sp)
                 }
+                IconButton(onClick = { tab = "تنظیمات" }) {
+                    Icon(Icons.Default.Settings, contentDescription = "تنظیمات", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
                 Icon(Icons.Default.Apartment, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه", "تنظیمات").forEach { item ->
+                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
                     FilterChip(selected = tab == item, onClick = { tab = item }, label = { Text(item) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color.White, selectedLabelColor = Navy, labelColor = Color(0xFFE0E9F5)))
                 }
             }
