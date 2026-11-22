@@ -102,6 +102,10 @@ abstract class BuildingDatabase : RoomDatabase() {
     abstract fun dao(): BuildingDao
     companion object {
         @Volatile private var INSTANCE: BuildingDatabase? = null
+        fun closeInstance() = synchronized(this) {
+            INSTANCE?.close()
+            INSTANCE = null
+        }
         fun get(context: Context): BuildingDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(context.applicationContext, BuildingDatabase::class.java, "building-manager.db")
                 .addMigrations(object : Migration(1, 2) {
