@@ -195,7 +195,7 @@ private fun Dashboard(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricCard("تعداد ساکنان", totalPeople.toString(), Icons.Default.People, Color(0xFF7048D8), Modifier.weight(1f))
-                MetricCard("واحدهای دارای سکنه", "$occupied از ${units.size}", Icons.Default.Home, Green, Modifier.weight(1f))
+                MetricCard("واحدهای دارای ساکن", "$occupied از ${units.size}", Icons.Default.Home, Green, Modifier.weight(1f))
             }
         }
         item {
