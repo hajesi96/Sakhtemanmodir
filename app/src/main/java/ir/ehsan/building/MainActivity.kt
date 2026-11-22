@@ -32,17 +32,17 @@ import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
 
-private val Navy = Color(0xFF142B4A)
-private val Blue = Color(0xFF2563EB)
-private val Pale = Color(0xFFF3F6FB)
-private val Green = Color(0xFF15966A)
-private val Red = Color(0xFFD94848)
+private val Navy = Color(0xFF172B4D)
+private val Blue = Color(0xFF536DFE)
+private val Pale = Color(0xFFF4F6FB)
+private val Green = Color(0xFF0F9D83)
+private val Red = Color(0xFFE05A6F)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(20, 43, 74)
-        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Pale, surface = Color.White)) { BuildingApp() } }
+        window.statusBarColor = android.graphics.Color.rgb(23, 43, 77)
+        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Blue, onPrimary = Color.White, secondary = Green, background = Pale, surface = Color.White, onSurface = Navy)) { BuildingApp() } }
     }
 }
 
