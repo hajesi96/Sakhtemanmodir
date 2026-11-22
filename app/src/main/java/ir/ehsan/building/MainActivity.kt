@@ -432,13 +432,29 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
 private fun SettingsScreen(context: android.content.Context) {
     val prefs = remember { context.getSharedPreferences("building_settings", android.content.Context.MODE_PRIVATE) }
     var buildingName by remember { mutableStateOf(prefs.getString("building_name", "ساختمان ما") ?: "ساختمان ما") }
+    var managerName by remember { mutableStateOf(prefs.getString("manager_name", "") ?: "") }
+    var defaultCharge by remember { mutableStateOf(prefs.getString("default_charge", "0") ?: "0") }
+    var reminderDay by remember { mutableStateOf(prefs.getString("reminder_day", "1") ?: "1") }
     var reminders by remember { mutableStateOf(prefs.getBoolean("reminders", true)) }
     var compact by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
+    var reminderExpanded by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("تنظیمات برنامه", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text("تغییرات این بخش روی همین دستگاه ذخیره می‌شوند.", color = Color.Gray, fontSize = 12.sp) }
-        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اطلاعات ساختمان", color = Navy, fontWeight = FontWeight.Bold)
             OutlinedTextField(value = buildingName, onValueChange = { buildingName = it; prefs.edit().putString("building_name", it).apply() }, label = { Text("نام ساختمان") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = managerName, onValueChange = { managerName = it; prefs.edit().putString("manager_name", it).apply() }, label = { Text("نام مدیر ساختمان") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        } } }
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("تنظیمات مالی و یادآوری", color = Navy, fontWeight = FontWeight.Bold)
+            OutlinedTextField(value = defaultCharge, onValueChange = { if (it.all(Char::isDigit)) { defaultCharge = it; prefs.edit().putString("default_charge", it).apply() } }, label = { Text("مبلغ شارژ پیش‌فرض (تومان)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Box {
+                OutlinedTextField(value = "روز $reminderDay هر ماه", onValueChange = {}, readOnly = true, label = { Text("روز یادآوری پرداخت") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reminderExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true)
+                ExposedDropdownMenu(expanded = reminderExpanded, onDismissRequest = { reminderExpanded = false }) {
+                    (1..29).forEach { day -> DropdownMenuItem(text = { Text("روز $day") }, onClick = { reminderDay = day.toString(); prefs.edit().putString("reminder_day", reminderDay).apply(); reminderExpanded = false }) }
+                }
+            }
+            Text("روز یادآوری فقط ذخیره می‌شود؛ ارسال اعلان زمان‌بندی‌شده هنوز پیاده‌سازی نشده است.", color = Color.Gray, fontSize = 11.sp)
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("شخصی‌سازی", color = Navy, fontWeight = FontWeight.Bold)
@@ -446,8 +462,12 @@ private fun SettingsScreen(context: android.content.Context) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("یادآوری‌ها", modifier = Modifier.weight(1f), color = Navy); Switch(checked = reminders, onCheckedChange = { reminders = it; prefs.edit().putBoolean("reminders", it).apply() }) }
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("پشتیبان‌گیری و بازیابی", color = Navy, fontWeight = FontWeight.Bold)
+            Text("این بخش هنوز به عملیات واقعی پشتیبان‌گیری و بازیابی متصل نشده است.", color = Color.Gray, fontSize = 12.sp)
+        } } }
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("درباره برنامه", color = Navy, fontWeight = FontWeight.Bold)
-            Text("مدیریت ساختمان · نسخه ۱.۲.۰", color = Blue)
+            Text("مدیریت ساختمان · نسخه ۱.۲.۱", color = Blue)
             Text("اطلاعات واحدها و امور مالی در پایگاه داده محلی دستگاه نگهداری می‌شوند.", color = Color.Gray, fontSize = 11.sp)
         } } }
     }
