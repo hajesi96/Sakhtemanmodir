@@ -9,11 +9,11 @@ android {
     namespace = "ir.ehsan.building"
     compileSdk = 35
     defaultConfig {
-        applicationId = "ir.ehsan.building"
+        applicationId = "ir.ehsan.building.plus"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.2"
+        versionCode = 6
+        versionName = "1.3.0"
     }
     buildFeatures { compose = true }
     compileOptions {
