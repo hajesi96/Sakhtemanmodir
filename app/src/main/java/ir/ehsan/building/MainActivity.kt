@@ -100,7 +100,7 @@ fun BuildingApp() {
                 Icon(Icons.Default.Apartment, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
+                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه", "تنظیمات").forEach { item ->
                     FilterChip(selected = tab == item, onClick = { tab = item }, label = { Text(item) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color.White, selectedLabelColor = Navy, labelColor = Color(0xFFE0E9F5)))
                 }
             }
@@ -133,6 +133,7 @@ fun BuildingApp() {
                 })
                 "دریافت‌ها" -> PaymentScreen(payments, units, onAdd = { dialog = "payment" }, onDelete = { id -> scope.launch { dao.deletePayment(id) } })
                 "هزینه‌ها" -> ExpenseScreen(expenses, onAdd = { dialog = "expense" }, onDelete = { id -> scope.launch { dao.deleteExpense(id) } })
+                "تنظیمات" -> SettingsScreen(context)
                 else -> ReportScreen(month, { month = it }, units, residents, payments, expenses, onExport = {
                     scope.launch {
                         try {
@@ -417,6 +418,31 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
         item { MetricCard("مانده خالص", money(paid - spent), Icons.Default.Analytics, Navy, Modifier.fillMaxWidth()) }
         item { Button(onClick = onExport, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("ساخت و اشتراک فایل Excel") } }
         item { Text("در فایل اکسل، خلاصه مالی، فهرست واحدها، تعداد ساکنان، سهم آب بر مبنای نفرات، دریافت‌ها و هزینه‌ها درج می‌شود.", color = Color.Gray, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun SettingsScreen(context: android.content.Context) {
+    val prefs = remember { context.getSharedPreferences("building_settings", android.content.Context.MODE_PRIVATE) }
+    var buildingName by remember { mutableStateOf(prefs.getString("building_name", "ساختمان ما") ?: "ساختمان ما") }
+    var reminders by remember { mutableStateOf(prefs.getBoolean("reminders", true)) }
+    var compact by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("تنظیمات برنامه", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text("تغییرات این بخش روی همین دستگاه ذخیره می‌شوند.", color = Color.Gray, fontSize = 12.sp) }
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("اطلاعات ساختمان", color = Navy, fontWeight = FontWeight.Bold)
+            OutlinedTextField(value = buildingName, onValueChange = { buildingName = it; prefs.edit().putString("building_name", it).apply() }, label = { Text("نام ساختمان") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        } } }
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("شخصی‌سازی", color = Navy, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("نمای فشرده", modifier = Modifier.weight(1f), color = Navy); Switch(checked = compact, onCheckedChange = { compact = it; prefs.edit().putBoolean("compact", it).apply() }) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("یادآوری‌ها", modifier = Modifier.weight(1f), color = Navy); Switch(checked = reminders, onCheckedChange = { reminders = it; prefs.edit().putBoolean("reminders", it).apply() }) }
+        } } }
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("درباره برنامه", color = Navy, fontWeight = FontWeight.Bold)
+            Text("مدیریت ساختمان · نسخه ۱.۲.۰", color = Blue)
+            Text("اطلاعات واحدها و امور مالی در پایگاه داده محلی دستگاه نگهداری می‌شوند.", color = Color.Gray, fontSize = 11.sp)
+        } } }
     }
 }
 
