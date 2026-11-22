@@ -2,6 +2,13 @@ package ir.ehsan.building
 
 import android.content.Intent
 import android.net.Uri
+import android.database.sqlite.SQLiteDatabase
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -454,7 +461,94 @@ private fun SettingsScreen(context: android.content.Context, dao: BuildingDao) {
     var elevatorExpanded by remember { mutableStateOf(false) }
     val activity = context as? ComponentActivity
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) prefs.edit().putBoolean("reminders", false).apply()
+        if (!granted) {
+            reminders = false
+            prefs.edit().putBoolean("reminders", false).apply()
+        }
+    }
+    val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) {
+            val resolver = context.contentResolver
+            try {
+                prefs.edit().commit()
+                val dbFile = context.getDatabasePath("building-manager.db")
+                val roomDb = BuildingDatabase.get(context)
+                roomDb.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").use { }
+                resolver.openOutputStream(uri)?.use { output ->
+                    ZipOutputStream(output).use { zip ->
+                        fun addFile(entryName: String, file: File) {
+                            if (!file.isFile) throw IllegalStateException("فایل لازم پیدا نشد: $entryName")
+                            zip.putNextEntry(ZipEntry(entryName))
+                            FileInputStream(file).use { input -> input.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                        zip.putNextEntry(ZipEntry("backup-version.txt"))
+                        zip.write("1".toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
+                        addFile("building-manager.db", dbFile)
+                        val prefsFile = File(context.applicationInfo.dataDir, "shared_prefs/building_settings.xml")
+                        if (prefsFile.exists()) addFile("building_settings.xml", prefsFile)
+                    }
+                } ?: throw IllegalStateException("امکان نوشتن فایل وجود ندارد")
+                android.widget.Toast.makeText(context, "نسخه پشتیبان با موفقیت ذخیره شد", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "خطا در پشتیبان‌گیری: ${e.localizedMessage ?: "نامشخص"}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                val tempDir = File(context.cacheDir, "restore-check").apply { deleteRecursively(); mkdirs() }
+                var hasVersion = false
+                var hasDatabase = false
+                var hasPrefs = false
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    ZipInputStream(input).use { zip ->
+                        var entry = zip.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory) {
+                                val target = when (entry.name) {
+                                    "backup-version.txt" -> File(tempDir, "backup-version.txt").also { hasVersion = true }
+                                    "building-manager.db" -> File(tempDir, "building-manager.db").also { hasDatabase = true }
+                                    "building_settings.xml" -> File(tempDir, "building_settings.xml").also { hasPrefs = true }
+                                    else -> null
+                                }
+                                if (target != null) FileOutputStream(target).use { output -> zip.copyTo(output) }
+                            }
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                        }
+                    }
+                } ?: throw IllegalStateException("فایل انتخاب‌شده قابل خواندن نیست")
+                val restoredDb = File(tempDir, "building-manager.db")
+                if (!hasVersion || !hasDatabase || restoredDb.length() < 100 || !restoredDb.inputStream().use { input ->
+                    val header = ByteArray(16)
+                    input.read(header) == 16 && String(header, Charsets.US_ASCII) == "SQLite format 3\u0000"
+                }) throw IllegalArgumentException("فایل پشتیبان معتبر نیست")
+                val database = context.getDatabasePath("building-manager.db")
+                BuildingDatabase.closeInstance()
+                File(database.path + "-wal").delete()
+                File(database.path + "-shm").delete()
+                database.parentFile?.mkdirs()
+                restoredDb.copyTo(database, overwrite = true)
+                if (hasPrefs) {
+                    val prefsFile = File(context.applicationInfo.dataDir, "shared_prefs/building_settings.xml")
+                    prefsFile.parentFile?.mkdirs()
+                    File(tempDir, "building_settings.xml").copyTo(prefsFile, overwrite = true)
+                }
+                tempDir.deleteRecursively()
+                android.widget.Toast.makeText(context, "بازیابی انجام شد؛ برنامه دوباره باز می‌شود", android.widget.Toast.LENGTH_LONG).show()
+                val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    ?: throw IllegalStateException("صفحه شروع برنامه پیدا نشد")
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                context.startActivity(launch)
+                activity?.finish()
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "بازیابی انجام نشد: ${e.localizedMessage ?: "فایل نامعتبر"}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("تنظیمات برنامه", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text("تغییرات این بخش روی همین دستگاه ذخیره می‌شوند.", color = Color.Gray, fontSize = 12.sp) }
@@ -494,9 +588,16 @@ private fun SettingsScreen(context: android.content.Context, dao: BuildingDao) {
                 TextButton(onClick = { notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }) { Text("فعال‌سازی مجوز اعلان‌ها") }
             }
         } } }
-        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("پشتیبان‌گیری و بازیابی", color = Navy, fontWeight = FontWeight.Bold)
-            Text("عملیات پشتیبان‌گیری و بازیابی هنوز تکمیل نشده است؛ برای جلوگیری از تحویل نسخه ناقص، این بخش را فعال‌شده اعلام نمی‌کنم.", color = Color.Gray, fontSize = 12.sp)
+            Text("از اطلاعات واحدها، ساکنان، پرداخت‌ها، هزینه‌ها، حساب‌های کاربری و تنظیمات فایل پشتیبان ZIP تهیه می‌شود. فایل را در محل امن نگهداری کنید.", color = Color.Gray, fontSize = 12.sp)
+            Button(onClick = { backupLauncher.launch("ModirPlus-Backup.zip") }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Backup, null); Spacer(Modifier.width(8.dp)); Text("تهیه نسخه پشتیبان")
+            }
+            OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("بازیابی از فایل پشتیبان")
+            }
+            Text("توجه: بازیابی، اطلاعات فعلی این دستگاه را با اطلاعات فایل پشتیبان جایگزین می‌کند.", color = Red, fontSize = 11.sp)
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("درباره برنامه", color = Navy, fontWeight = FontWeight.Bold)
