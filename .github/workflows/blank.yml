@@ -38,3 +38,5 @@ jobs:
         with:
           name: Modir-APK
           path: app/build/outputs/apk/debug/Modir.apk
+
+# Rebuild trigger: package the current feature branch as Modir.apk.
