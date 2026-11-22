@@ -87,7 +87,11 @@ fun BuildingApp() {
     val waterBills by dao.waterBills().collectAsState(initial = emptyList())
 
     LaunchedEffect(Unit) {
-        if (dao.unitCount() == 0) (1..16).forEach { dao.insertUnit(UnitEntity(number = it)) }
+        val seedPrefs = context.getSharedPreferences("building_settings", android.content.Context.MODE_PRIVATE)
+        if (!seedPrefs.getBoolean("initial_units_seeded", false)) {
+            if (dao.unitCount() == 0) (1..16).forEach { dao.insertUnit(UnitEntity(number = it)) }
+            seedPrefs.edit().putBoolean("initial_units_seeded", true).apply()
+        }
     }
 
     Scaffold(containerColor = Pale, topBar = {
@@ -446,19 +450,43 @@ private fun SettingsScreen(context: android.content.Context) {
     }
 }
 
+private fun solarMonthName(monthKey: String): String {
+    val names = listOf("فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند")
+    val parts = monthKey.split("-")
+    val index = (parts.getOrNull(1)?.toIntOrNull() ?: 0) - 1
+    return if (index in names.indices) names[index] + " " + (parts.getOrNull(0) ?: "") else monthKey
+}
+
 @Composable
 private fun EntryDialog(type: String, units: List<UnitEntity>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     val fields = when (type) {
         "unit" -> listOf("شماره واحد", "نام مالک", "نام مستأجر", "شماره تماس", "شارژ ثابت (تومان)", "تعداد نفرات")
         "resident" -> listOf("شماره واحد", "نام ساکن", "شماره تماس")
-        "payment" -> listOf("شماره واحد", "مبلغ (تومان)", "ماه شمسی (1405-08)", "تاریخ", "شرح")
+        "payment" -> listOf("شماره واحد", "مبلغ (تومان)", "ماه", "تاریخ", "نوع دریافت")
         else -> listOf("عنوان هزینه", "دسته‌بندی", "مبلغ (تومان)", "ماه شمسی (1405-08)", "تاریخ", "شرح")
     }
-    val values = remember(type) { fields.map { if (it.startsWith("ماه")) currentMonth() else if (it == "تاریخ") currentSolarDate() else "" }.toMutableStateList() }
+    val values = remember(type) { fields.map { if (it == "ماه" || it.startsWith("ماه شمسی")) currentMonth() else if (it == "تاریخ") currentSolarDate() else if (it == "نوع دریافت") "شارژ ماهیانه" else "" }.toMutableStateList() }
+    var typeExpanded by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(when(type) { "unit" -> "افزودن واحد"; "resident" -> "افزودن ساکن"; "payment" -> "ثبت دریافت"; else -> "ثبت هزینه" }, color = Navy, fontWeight = FontWeight.Bold) },
         text = { Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             if (type == "payment") Text("شماره واحدهای موجود: ${units.joinToString("، ") { it.number.toString() }}", fontSize = 11.sp, color = Blue)
-            fields.forEachIndexed { i, label -> OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp)) }
+            fields.forEachIndexed { i, label ->
+                when {
+                    type == "payment" && label == "ماه" -> {
+                        OutlinedTextField(value = solarMonthName(values[i]), onValueChange = {}, readOnly = true, label = { Text("نام ماه") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        Text("تاریخ شمسی: ${values[3]}", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    type == "payment" && label == "تاریخ" -> Unit
+                    type == "payment" && label == "نوع دریافت" -> Box {
+                        OutlinedTextField(value = values[i], onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth().clickable { typeExpanded = true }, singleLine = true)
+                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
+                            listOf("هزینه آب", "شارژ ماهیانه").forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { values[i] = option; typeExpanded = false }) }
+                        }
+                    }
+                    else -> OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                }
+            }
         } },
-        confirmButton = { Button(onClick = { onSave(values.toList()) }) { Text("ذخیره") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } })
+        confirmButton = { Button(onClick = { onSave(values.toList()) }) { Text("ذخیره") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } })
 }
