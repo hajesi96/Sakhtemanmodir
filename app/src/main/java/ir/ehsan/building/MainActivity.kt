@@ -481,10 +481,30 @@ private fun EntryDialog(type: String, units: List<UnitEntity>, onDismiss: () -> 
                     type == "payment" && label == "تاریخ" -> {
                         OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text("تاریخ شمسی") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
                     }
-                    type == "payment" && label == "نوع دریافت" -> Box {
-                        OutlinedTextField(value = values[i], onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth().clickable { typeExpanded = true }, singleLine = true)
-                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            listOf("هزینه آب", "شارژ ماهیانه").forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { values[i] = option; typeExpanded = false }) }
+                    type == "payment" && label == "نوع دریافت" -> ExposedDropdownMenuBox(
+                        expanded = typeExpanded,
+                        onExpandedChange = { typeExpanded = !typeExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = values[i],
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("نوع دریافت") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = typeExpanded,
+                            onDismissRequest = { typeExpanded = false }
+                        ) {
+                            listOf("پول آب", "شارژ ماهیانه").forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = { values[i] = option; typeExpanded = false }
+                                )
+                            }
                         }
                     }
                     else -> OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
