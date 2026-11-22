@@ -449,7 +449,7 @@ private fun SettingsScreen(context: android.content.Context) {
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("تنظیمات مالی و یادآوری", color = Navy, fontWeight = FontWeight.Bold)
             OutlinedTextField(value = defaultCharge, onValueChange = { if (it.all(Char::isDigit)) { defaultCharge = it; prefs.edit().putString("default_charge", it).apply() } }, label = { Text("مبلغ شارژ پیش‌فرض (تومان)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Box {
+            ExposedDropdownMenuBox(expanded = reminderExpanded, onExpandedChange = { reminderExpanded = !reminderExpanded }) {
                 OutlinedTextField(value = "روز $reminderDay هر ماه", onValueChange = {}, readOnly = true, label = { Text("روز یادآوری پرداخت") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reminderExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true)
                 ExposedDropdownMenu(expanded = reminderExpanded, onDismissRequest = { reminderExpanded = false }) {
                     (1..29).forEach { day -> DropdownMenuItem(text = { Text("روز $day") }, onClick = { reminderDay = day.toString(); prefs.edit().putString("reminder_day", reminderDay).apply(); reminderExpanded = false }) }
