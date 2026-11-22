@@ -2,7 +2,7 @@ name: Build SakhtemanModir APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/v1.2.0-settings-payments']
   workflow_dispatch:
 
 permissions:
