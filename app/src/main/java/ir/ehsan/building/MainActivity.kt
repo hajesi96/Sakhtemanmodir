@@ -31,6 +31,10 @@ import ir.ehsan.building.export.XlsxExporter
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
+import android.util.Base64
 
 private val Navy = Color(0xFF172B4D)
 private val Blue = Color(0xFF536DFE)
@@ -76,6 +80,10 @@ fun BuildingApp() {
     val db = remember { BuildingDatabase.get(context) }
     val dao = remember { db.dao() }
     val scope = rememberCoroutineScope()
+    var session by remember { mutableStateOf<AccountEntity?>(null) }
+    if (session == null) { AuthGate(dao) { session = it }; return }
+    if (session?.role == "resident") { ResidentPortal(dao, session!!) { session = null }; return }
+    val accounts by dao.accounts().collectAsState(initial = emptyList())
     val units by dao.units().collectAsState(initial = emptyList())
     val residents by dao.residents().collectAsState(initial = emptyList())
     val payments by dao.payments().collectAsState(initial = emptyList())
@@ -107,7 +115,7 @@ fun BuildingApp() {
                 Icon(Icons.Default.Apartment, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf("نمای کلی", "واحدها", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
+                listOf("نمای کلی", "واحدها", "حساب ساکنین", "قبض آب", "دریافت‌ها", "هزینه‌ها", "گزارش ماهانه").forEach { item ->
                     FilterChip(selected = tab == item, onClick = { tab = item }, label = { Text(item) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color.White, selectedLabelColor = Navy, labelColor = Color(0xFFE0E9F5)))
                 }
             }
@@ -117,6 +125,7 @@ fun BuildingApp() {
             when (tab) {
                 "نمای کلی" -> Dashboard(units, residents, payments, expenses, month, onNavigate = { tab = it })
                 "واحدها" -> UnitScreen(units, residents, payments, onAdd = { dialog = "unit" }, onDelete = { id -> scope.launch { dao.deleteUnit(id) } })
+                "حساب ساکنین" -> ManagerAccountsScreen(units, accounts, onCreate = { username, password, unitId -> scope.launch { try { val salt = newSalt(); dao.saveAccount(AccountEntity(username = username, passwordSalt = salt, passwordHash = hashPassword(password, salt), role = "resident", unitId = unitId)); notice = "حساب ساکن ساخته شد" } catch (e: Exception) { notice = "نام کاربری تکراری است یا ذخیره انجام نشد" } } }, onDelete = { id -> scope.launch { dao.deleteResidentAccount(id) } })
                 "قبض آب" -> WaterBillScreen(month, { month = it }, units, residents, waterBills, onSave = { m, total ->
                     scope.launch {
                         val counts = units.associate { it.id to it.peopleCount }
@@ -471,6 +480,138 @@ private fun SettingsScreen(context: android.content.Context) {
             Text("مدیریت ساختمان · نسخه ۱.۲.۱", color = Blue)
             Text("اطلاعات واحدها و امور مالی در پایگاه داده محلی دستگاه نگهداری می‌شوند.", color = Color.Gray, fontSize = 11.sp)
         } } }
+    }
+}
+
+
+
+private fun newSalt(): String {
+    val bytes = ByteArray(16)
+    SecureRandom().nextBytes(bytes)
+    return Base64.encodeToString(bytes, Base64.NO_WRAP)
+}
+
+private fun hashPassword(password: String, salt: String): String {
+    val spec = PBEKeySpec(password.toCharArray(), Base64.decode(salt, Base64.NO_WRAP), 120000, 256)
+    return Base64.encodeToString(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded, Base64.NO_WRAP)
+}
+
+private fun passwordMatches(password: String, account: AccountEntity): Boolean =
+    java.security.MessageDigest.isEqual(
+        Base64.decode(hashPassword(password, account.passwordSalt), Base64.NO_WRAP),
+        Base64.decode(account.passwordHash, Base64.NO_WRAP)
+    )
+
+@Composable
+private fun AuthGate(dao: BuildingDao, onLogin: (AccountEntity) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var managerExists by remember { mutableStateOf<Boolean?>(null) }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { managerExists = dao.managerCount() > 0 }
+    Column(Modifier.fillMaxSize().background(Pale).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.Apartment, null, tint = Blue, modifier = Modifier.size(58.dp))
+        Text("Modir Plus", color = Navy, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(if (managerExists == false) "ساخت حساب مدیر اصلی" else "ورود مدیر یا ساکن", color = Navy, fontSize = 17.sp)
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(username, { username = it }, label = { Text("نام کاربری") }, singleLine = true)
+        OutlinedTextField(password, { password = it }, label = { Text("رمز عبور") }, singleLine = true)
+        if (error.isNotBlank()) Text(error, color = Red)
+        Button(enabled = !busy && username.isNotBlank() && password.length >= 6 && managerExists != null, onClick = {
+            busy = true
+            scope.launch {
+                try {
+                    if (managerExists == false) {
+                        val salt = newSalt()
+                        val account = AccountEntity(username = username.trim(), passwordSalt = salt, passwordHash = hashPassword(password, salt), role = "manager")
+                        dao.saveAccount(account)
+                        onLogin(dao.accountByUsername(username.trim()) ?: account)
+                    } else {
+                        val account = dao.accountByUsername(username.trim())
+                        if (account != null && account.active && passwordMatches(password, account)) onLogin(account)
+                        else error = "نام کاربری یا رمز عبور اشتباه است"
+                    }
+                } catch (e: Exception) { error = "عملیات ورود انجام نشد" }
+                busy = false
+            }
+        }) { Text(if (managerExists == false) "ساخت حساب مدیر" else "ورود") }
+        Text("رمز عبور باید حداقل ۶ کاراکتر باشد.", color = Color.Gray, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun ManagerAccountsScreen(
+    units: List<UnitEntity>,
+    accounts: List<AccountEntity>,
+    onCreate: (String, String, Long) -> Unit,
+    onDelete: (Long) -> Unit
+) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var unitNumber by remember { mutableStateOf("") }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Text("حساب کاربری ساکنین", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("برای هر واحد یک نام کاربری و رمز مستقل بسازید.", color = Color.Gray, fontSize = 12.sp)
+            OutlinedTextField(username, { username = it }, label = { Text("نام کاربری") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(password, { password = it }, label = { Text("رمز عبور (حداقل ۶ کاراکتر)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(unitNumber, { unitNumber = it.filter(Char::isDigit) }, label = { Text("شماره واحد") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Button(enabled = username.isNotBlank() && password.length >= 6 && units.any { it.number == unitNumber.toIntOrNull() }, onClick = {
+                val unit = units.first { it.number == unitNumber.toInt() }
+                onCreate(username.trim(), password, unit.id)
+                username = ""; password = ""; unitNumber = ""
+            }, modifier = Modifier.fillMaxWidth()) { Text("ایجاد حساب واحد") }
+        }
+        item { Text("حساب‌های فعال", color = Navy, fontWeight = FontWeight.Bold) }
+        items(accounts.filter { it.role == "resident" }) { account ->
+            val unitNo = units.firstOrNull { it.id == account.unitId }?.number ?: 0
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("واحد $unitNo", color = Navy, fontWeight = FontWeight.Bold)
+                        Text("نام کاربری: ${account.username}", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { onDelete(account.id) }) { Text("حذف", color = Red) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResidentPortal(dao: BuildingDao, account: AccountEntity, onLogout: () -> Unit) {
+    val units by dao.units().collectAsState(initial = emptyList())
+    val payments by dao.payments().collectAsState(initial = emptyList())
+    val unit = units.firstOrNull { it.id == account.unitId }
+    Scaffold(containerColor = Pale, topBar = {
+        Row(Modifier.fillMaxWidth().background(Navy).statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("پنل ساکن", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            TextButton(onClick = onLogout) { Text("خروج", color = Color.White) }
+        }
+    }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("واحد ${unit?.number ?: "-"}", color = Navy, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        Text("شارژ ثابت: ${money(unit?.fixedCharge ?: 0)}", color = Blue)
+                        Text("تعداد ساکنان: ${unit?.peopleCount ?: 0}", color = Color.Gray)
+                    }
+                }
+            }
+            item { Text("پرداخت‌های واحد شما", color = Navy, fontWeight = FontWeight.Bold) }
+            items(payments.filter { it.unitId == account.unitId }, key = { it.id }) { payment ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text(money(payment.amount), color = Green, fontWeight = FontWeight.Bold)
+                        Text("${solarMonthName(payment.monthKey)} · ${payment.dateText} · ${payment.description}", color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
+            }
+            if (payments.none { it.unitId == account.unitId }) item { Text("هنوز پرداختی برای این واحد ثبت نشده است.", color = Color.Gray) }
+        }
     }
 }
 
