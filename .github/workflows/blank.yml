@@ -30,8 +30,11 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug
 
+      - name: Rename APK for download
+        run: cp app/build/outputs/apk/debug/app-debug.apk 'app/build/outputs/apk/debug/مدیر.apk'
+
       - name: Save APK
         uses: actions/upload-artifact@v4
         with:
-          name: SakhtemanModir-APK
-          path: app/build/outputs/apk/debug/*.apk
+          name: Modir-APK
+          path: app/build/outputs/apk/debug/مدیر.apk
