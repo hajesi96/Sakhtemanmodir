@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -149,7 +151,7 @@ fun BuildingApp() {
                 })
                 "دریافت‌ها" -> PaymentScreen(payments, units, onAdd = { dialog = "payment" }, onDelete = { id -> scope.launch { dao.deletePayment(id) } })
                 "هزینه‌ها" -> ExpenseScreen(expenses, onAdd = { dialog = "expense" }, onDelete = { id -> scope.launch { dao.deleteExpense(id) } })
-                "تنظیمات" -> SettingsScreen(context)
+                "تنظیمات" -> SettingsScreen(context, dao)
                 else -> ReportScreen(month, { month = it }, units, residents, payments, expenses, onExport = {
                     scope.launch {
                         try {
@@ -439,15 +441,21 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(context: android.content.Context) {
+private fun SettingsScreen(context: android.content.Context, dao: BuildingDao) {
     val prefs = remember { context.getSharedPreferences("building_settings", android.content.Context.MODE_PRIVATE) }
     var buildingName by remember { mutableStateOf(prefs.getString("building_name", "ساختمان ما") ?: "ساختمان ما") }
     var managerName by remember { mutableStateOf(prefs.getString("manager_name", "") ?: "") }
     var defaultCharge by remember { mutableStateOf(prefs.getString("default_charge", "0") ?: "0") }
     var reminderDay by remember { mutableStateOf(prefs.getString("reminder_day", "1") ?: "1") }
+    var elevatorDay by remember { mutableStateOf(prefs.getString("elevator_reminder_day", "1") ?: "1") }
     var reminders by remember { mutableStateOf(prefs.getBoolean("reminders", true)) }
     var compact by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
     var reminderExpanded by remember { mutableStateOf(false) }
+    var elevatorExpanded by remember { mutableStateOf(false) }
+    val activity = context as? ComponentActivity
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) prefs.edit().putBoolean("reminders", false).apply()
+    }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("تنظیمات برنامه", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text("تغییرات این بخش روی همین دستگاه ذخیره می‌شوند.", color = Color.Gray, fontSize = 12.sp) }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -459,30 +467,44 @@ private fun SettingsScreen(context: android.content.Context) {
             Text("تنظیمات مالی و یادآوری", color = Navy, fontWeight = FontWeight.Bold)
             OutlinedTextField(value = defaultCharge, onValueChange = { if (it.all(Char::isDigit)) { defaultCharge = it; prefs.edit().putString("default_charge", it).apply() } }, label = { Text("مبلغ شارژ پیش‌فرض (تومان)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             ExposedDropdownMenuBox(expanded = reminderExpanded, onExpandedChange = { reminderExpanded = !reminderExpanded }) {
-                OutlinedTextField(value = "روز $reminderDay هر ماه", onValueChange = {}, readOnly = true, label = { Text("روز یادآوری پرداخت") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reminderExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true)
+                OutlinedTextField(value = "یادآوری شارژ: روز $reminderDay هر ماه", onValueChange = {}, readOnly = true, label = { Text("روز یادآوری پرداخت") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reminderExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true)
                 ExposedDropdownMenu(expanded = reminderExpanded, onDismissRequest = { reminderExpanded = false }) {
                     (1..29).forEach { day -> DropdownMenuItem(text = { Text("روز $day") }, onClick = { reminderDay = day.toString(); prefs.edit().putString("reminder_day", reminderDay).apply(); reminderExpanded = false }) }
                 }
             }
-            Text("روز یادآوری فقط ذخیره می‌شود؛ ارسال اعلان زمان‌بندی‌شده هنوز پیاده‌سازی نشده است.", color = Color.Gray, fontSize = 11.sp)
+            ExposedDropdownMenuBox(expanded = elevatorExpanded, onExpandedChange = { elevatorExpanded = !elevatorExpanded }) {
+                OutlinedTextField(value = "یادآوری سرویس آسانسور: روز $elevatorDay هر ماه", onValueChange = {}, readOnly = true, label = { Text("روز سرویس آسانسور") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = elevatorExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true)
+                ExposedDropdownMenu(expanded = elevatorExpanded, onDismissRequest = { elevatorExpanded = false }) {
+                    (1..29).forEach { day -> DropdownMenuItem(text = { Text("روز $day") }, onClick = { elevatorDay = day.toString(); prefs.edit().putString("elevator_reminder_day", elevatorDay).apply(); elevatorExpanded = false }) }
+                }
+            }
+            Text("اعلان‌ها به‌صورت دوره‌ای بررسی می‌شوند و ممکن است با کمی تأخیر نمایش داده شوند.", color = Color.Gray, fontSize = 11.sp)
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("شخصی‌سازی", color = Navy, fontWeight = FontWeight.Bold)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("نمای فشرده", modifier = Modifier.weight(1f), color = Navy); Switch(checked = compact, onCheckedChange = { compact = it; prefs.edit().putBoolean("compact", it).apply() }) }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("یادآوری‌ها", modifier = Modifier.weight(1f), color = Navy); Switch(checked = reminders, onCheckedChange = { reminders = it; prefs.edit().putBoolean("reminders", it).apply() }) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("یادآوری‌ها", modifier = Modifier.weight(1f), color = Navy); Switch(checked = reminders, onCheckedChange = { enabled ->
+                reminders = enabled
+                prefs.edit().putBoolean("reminders", enabled).apply()
+                if (enabled && android.os.Build.VERSION.SDK_INT >= 33 && activity?.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }) }
+            if (android.os.Build.VERSION.SDK_INT >= 33 && activity?.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                TextButton(onClick = { notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }) { Text("فعال‌سازی مجوز اعلان‌ها") }
+            }
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("پشتیبان‌گیری و بازیابی", color = Navy, fontWeight = FontWeight.Bold)
-            Text("این بخش هنوز به عملیات واقعی پشتیبان‌گیری و بازیابی متصل نشده است.", color = Color.Gray, fontSize = 12.sp)
+            Text("عملیات پشتیبان‌گیری و بازیابی هنوز تکمیل نشده است؛ برای جلوگیری از تحویل نسخه ناقص، این بخش را فعال‌شده اعلام نمی‌کنم.", color = Color.Gray, fontSize = 12.sp)
         } } }
         item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("درباره برنامه", color = Navy, fontWeight = FontWeight.Bold)
-            Text("مدیریت ساختمان · نسخه ۱.۲.۱", color = Blue)
+            Text("مدیریت ساختمان · نسخه ۱.۳.۰", color = Blue)
             Text("اطلاعات واحدها و امور مالی در پایگاه داده محلی دستگاه نگهداری می‌شوند.", color = Color.Gray, fontSize = 11.sp)
         } } }
     }
 }
-
 
 
 private fun newSalt(): String {
