@@ -325,7 +325,7 @@ private fun PaymentScreen(payments: List<PaymentEntity>, units: List<UnitEntity>
         item { PageHeader("دریافت‌ها و پرداختی‌ها", "ثبت شارژهای واریزشده توسط واحدها", "ثبت دریافت", onAdd) }
         items(payments, key = { it.id }) { p ->
             val no = units.find { it.id == p.unitId }?.number ?: 0
-            SimpleRow("واحد $no · ${money(p.amount)}", "${p.monthKey}  |  ${p.dateText}  ${p.description}", onDelete = { onDelete(p.id) })
+            SimpleRow("واحد $no · ${money(p.amount)}", "${solarMonthName(p.monthKey)}  |  ${p.dateText}  ${p.description}", onDelete = { onDelete(p.id) })
         }
         if (payments.isEmpty()) item { EmptyState("هنوز دریافتی ثبت نشده است") }
     }
@@ -335,7 +335,7 @@ private fun PaymentScreen(payments: List<PaymentEntity>, units: List<UnitEntity>
 private fun ExpenseScreen(expenses: List<ExpenseEntity>, onAdd: () -> Unit, onDelete: (Long) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item { PageHeader("هزینه‌های ساختمان", "ثبت و دسته‌بندی مخارج", "هزینه جدید", onAdd) }
-        items(expenses, key = { it.id }) { e -> SimpleRow("${e.title} · ${money(e.amount)}", "${e.category}  |  ${e.monthKey}  |  ${e.dateText}", onDelete = { onDelete(e.id) }) }
+        items(expenses, key = { it.id }) { e -> SimpleRow("${e.title} · ${money(e.amount)}", "${e.category}  |  ${solarMonthName(e.monthKey)}  |  ${e.dateText}", onDelete = { onDelete(e.id) }) }
         if (expenses.isEmpty()) item { EmptyState("هنوز هزینه‌ای ثبت نشده است") }
     }
 }
