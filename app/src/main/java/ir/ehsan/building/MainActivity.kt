@@ -474,9 +474,10 @@ private fun EntryDialog(type: String, units: List<UnitEntity>, onDismiss: () -> 
                 when {
                     type == "payment" && label == "ماه" -> {
                         OutlinedTextField(value = solarMonthName(values[i]), onValueChange = {}, readOnly = true, label = { Text("نام ماه") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        Text("تاریخ شمسی: ${values[3]}", color = Color.Gray, fontSize = 12.sp)
                     }
-                    type == "payment" && label == "تاریخ" -> Unit
+                    type == "payment" && label == "تاریخ" -> {
+                        OutlinedTextField(value = values[i], onValueChange = { values[i] = it }, label = { Text("تاریخ شمسی") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp))
+                    }
                     type == "payment" && label == "نوع دریافت" -> Box {
                         OutlinedTextField(value = values[i], onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth().clickable { typeExpanded = true }, singleLine = true)
                         DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
