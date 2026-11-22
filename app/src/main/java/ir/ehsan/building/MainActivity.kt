@@ -428,6 +428,7 @@ private fun ReportScreen(month: String, onMonth: (String) -> Unit, units: List<U
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(context: android.content.Context) {
     val prefs = remember { context.getSharedPreferences("building_settings", android.content.Context.MODE_PRIVATE) }
@@ -480,6 +481,7 @@ private fun solarMonthName(monthKey: String): String {
     return if (index in names.indices) names[index] + " " + (parts.getOrNull(0) ?: "") else monthKey
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryDialog(type: String, units: List<UnitEntity>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     val fields = when (type) {
