@@ -53,8 +53,24 @@ data class WaterBillEntity(val monthKey: String, val totalAmount: Long, val save
 @Entity(tableName = "water_allocations", primaryKeys = ["monthKey", "unitId"], indices = [Index("unitId")])
 data class WaterAllocationEntity(val monthKey: String, val unitId: Long, val residentCount: Int, val amount: Long)
 
+@Entity(tableName = "accounts", indices = [Index(value = ["username"], unique = true), Index("unitId")])
+data class AccountEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val username: String,
+    val passwordSalt: String,
+    val passwordHash: String,
+    val role: String,
+    val unitId: Long? = null,
+    val active: Boolean = true
+)
+
 @Dao
 interface BuildingDao {
+    @Query("SELECT COUNT(*) FROM accounts WHERE role = 'manager'") suspend fun managerCount(): Int
+    @Query("SELECT * FROM accounts WHERE username = :username LIMIT 1") suspend fun accountByUsername(username: String): AccountEntity?
+    @Query("SELECT * FROM accounts ORDER BY id") fun accounts(): Flow<List<AccountEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveAccount(account: AccountEntity)
+    @Query("DELETE FROM accounts WHERE id = :id AND role = 'resident'") suspend fun deleteResidentAccount(id: Long)
     @Query("SELECT * FROM units ORDER BY number") fun units(): Flow<List<UnitEntity>>
     @Query("SELECT * FROM residents ORDER BY unitId, name") fun residents(): Flow<List<ResidentEntity>>
     @Query("SELECT * FROM payments ORDER BY id DESC") fun payments(): Flow<List<PaymentEntity>>
@@ -81,7 +97,7 @@ interface BuildingDao {
     @Query("DELETE FROM expenses WHERE id = :id") suspend fun deleteExpense(id: Long)
 }
 
-@Database(entities = [UnitEntity::class, ResidentEntity::class, PaymentEntity::class, ExpenseEntity::class, WaterBillEntity::class, WaterAllocationEntity::class], version = 3, exportSchema = false)
+@Database(entities = [UnitEntity::class, ResidentEntity::class, PaymentEntity::class, ExpenseEntity::class, WaterBillEntity::class, WaterAllocationEntity::class, AccountEntity::class], version = 4, exportSchema = false)
 abstract class BuildingDatabase : RoomDatabase() {
     abstract fun dao(): BuildingDao
     companion object {
@@ -100,6 +116,12 @@ abstract class BuildingDatabase : RoomDatabase() {
                         db.execSQL("ALTER TABLE units ADD COLUMN peopleCount INTEGER NOT NULL DEFAULT 0")
                         db.execSQL("UPDATE units SET peopleCount = (SELECT COUNT(*) FROM residents WHERE residents.unitId = units.id)")
                         db.execSQL("UPDATE units SET phone = COALESCE((SELECT phone FROM residents WHERE residents.unitId = units.id AND phone != '' ORDER BY id LIMIT 1), '')")
+                    }
+                }, object : Migration(3, 4) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, username TEXT NOT NULL, passwordSalt TEXT NOT NULL, passwordHash TEXT NOT NULL, role TEXT NOT NULL, unitId INTEGER, active INTEGER NOT NULL DEFAULT 1)")
+                        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_accounts_username ON accounts(username)")
+                        db.execSQL("CREATE INDEX IF NOT EXISTS index_accounts_unitId ON accounts(unitId)")
                     }
                 }).build().also { INSTANCE = it }
         }
